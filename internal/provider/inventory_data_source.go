@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path"
 	"strings"
@@ -13,6 +14,23 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+// inventoryDataSourceModel maps the data source schema data.
+type InventoryDataSourceModel struct {
+	Id               types.Int64                      `tfsdk:"id"`
+	Organization     types.Int64                      `tfsdk:"organization"`
+	OrganizationName types.String                     `tfsdk:"organization_name"`
+	Url              types.String                     `tfsdk:"url"`
+	NamedUrl         types.String                     `tfsdk:"named_url"`
+	Name             types.String                     `tfsdk:"name"`
+	Description      types.String                     `tfsdk:"description"`
+	Variables        customtypes.AAPCustomStringValue `tfsdk:"variables"`
+}
+
+// InventoryDataSource is the data source implementation.
+type InventoryDataSource struct {
+	client *AAPClient
+}
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
@@ -25,11 +43,6 @@ func NewInventoryDataSource() datasource.DataSource {
 	return &InventoryDataSource{}
 }
 
-// inventoryDataSource is the data source implementation.
-type InventoryDataSource struct {
-	client *AAPClient
-}
-
 // Metadata returns the data source type name.
 func (d *InventoryDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_inventory"
@@ -40,16 +53,16 @@ func (d *InventoryDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"id": schema.Int64Attribute{
-				Optional: true,
+				Optional:    true,
 				Description: "Inventory id",
 			},
 			"organization": schema.Int64Attribute{
-				Computed: true,
+				Computed:    true,
 				Description: "Identifier for the organization to which the inventory belongs",
 			},
 			"organization_name": schema.StringAttribute{
-				Computed: true,
-				Optional: true,
+				Computed:    true,
+				Optional:    true,
 				Description: "The name for the organization to which the inventory belongs",
 			},
 			"url": schema.StringAttribute{
@@ -62,7 +75,7 @@ func (d *InventoryDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 			},
 			"name": schema.StringAttribute{
 				Computed:    true,
-				Optional: true,
+				Optional:    true,
 				Description: "Name of the inventory",
 			},
 			"description": schema.StringAttribute{
@@ -90,17 +103,8 @@ func (d *InventoryDataSource) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
-	//Here is where we can get the "named" inventory, which is "Inventory Name"++"Organization Name" to derive uniqueness
-	//we will take precedence if the Id is set to use that over the named_url attempt.
-
-	resourceURL := ""
-
-	if state.Id.String() != "<null>" {
-		resourceURL = path.Join(d.client.getApiEndpoint(), "inventories", state.Id.String())
-	} else if state.Name.String() != "<null>" && state.OrganizationName.String() != "<null>"{
-		namedUrl := strings.Join([]string{state.Name.String()[1 : len(state.Name.String()) - 1], "++", state.OrganizationName.String()[1 : len(state.OrganizationName.String()) - 1]}, "")
-		resourceURL = path.Join(d.client.getApiEndpoint(), "inventories", namedUrl)
-	} else { 
+	resourceURL, err := state.ValidateLookupParameters(d)
+	if err != nil {
 		resp.Diagnostics.AddError("Minimal Data Not Supplied", "Require [id] or [name and organization_name]")
 		return
 	}
@@ -143,19 +147,7 @@ func (d *InventoryDataSource) Configure(_ context.Context, req datasource.Config
 	d.client = client
 }
 
-// inventoryDataSourceModel maps the data source schema data.
-type InventoryDataSourceModel struct {
-	Id           types.Int64                      `tfsdk:"id"`
-	Organization types.Int64                      `tfsdk:"organization"`
-	OrganizationName types.String                 `tfsdk:"organization_name"`
-	Url          types.String                     `tfsdk:"url"`
-	NamedUrl     types.String                     `tfsdk:"named_url"`
-	Name         types.String                     `tfsdk:"name"`
-	Description  types.String                     `tfsdk:"description"`
-	Variables    customtypes.AAPCustomStringValue `tfsdk:"variables"`
-}
-
-func (d *InventoryDataSourceModel) ParseHttpResponse(body []byte) diag.Diagnostics {
+func (dm *InventoryDataSourceModel) ParseHttpResponse(body []byte) diag.Diagnostics {
 	var diags diag.Diagnostics
 
 	// Unmarshal the JSON response
@@ -167,14 +159,29 @@ func (d *InventoryDataSourceModel) ParseHttpResponse(body []byte) diag.Diagnosti
 	}
 
 	// Map response to the inventory datesource schema
-	d.Id = types.Int64Value(apiInventory.Id)
-	d.Organization = types.Int64Value(apiInventory.Organization)
-	d.OrganizationName = types.StringValue(apiInventory.SummaryFields.Organization.Name)
-	d.Url = types.StringValue(apiInventory.Url)
-	d.NamedUrl = types.StringValue(apiInventory.Related.NamedUrl)
-	d.Name = ParseStringValue(apiInventory.Name)
-	d.Description = ParseStringValue(apiInventory.Description)
-	d.Variables = ParseAAPCustomStringValue(apiInventory.Variables)
+	dm.Id = types.Int64Value(apiInventory.Id)
+	dm.Organization = types.Int64Value(apiInventory.Organization)
+	dm.OrganizationName = types.StringValue(apiInventory.SummaryFields.Organization.Name)
+	dm.Url = types.StringValue(apiInventory.Url)
+	dm.NamedUrl = types.StringValue(apiInventory.Related.NamedUrl)
+	dm.Name = ParseStringValue(apiInventory.Name)
+	dm.Description = ParseStringValue(apiInventory.Description)
+	dm.Variables = ParseAAPCustomStringValue(apiInventory.Variables)
 
 	return diags
+}
+
+// ValidateLookupParameters Validate the provided lookup parameters and return the appropriate resource url
+func (dm *InventoryDataSourceModel) ValidateLookupParameters(datasource *InventoryDataSource) (string, error) {
+	//Here is where we can get the "named" inventory, which is "Inventory Name"++"Organization Name" to derive uniqueness
+	//we will take precedence if the Id is set to use that over the named_url attempt.
+	if dm.Id.String() != "<null>" {
+		return path.Join(datasource.client.getApiEndpoint(), "inventories", dm.Id.String()), nil
+	} else if dm.Name.String() != "<null>" && dm.OrganizationName.String() != "<null>" {
+		namedUrl := strings.Join([]string{dm.Name.String()[1 : len(dm.Name.String())-1], "++", dm.OrganizationName.String()[1 : len(dm.OrganizationName.String())-1]}, "")
+		return path.Join(datasource.client.getApiEndpoint(), "inventories", namedUrl), nil
+	} else {
+		return "<null>", errors.New("invalid inventory lookup parameters")
+	}
+
 }
