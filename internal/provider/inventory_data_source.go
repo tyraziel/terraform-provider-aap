@@ -182,5 +182,4 @@ func (dm *InventoryDataSourceModel) ValidateLookupParameters(datasource *Invento
 	} else {
 		return "", errors.New("invalid inventory lookup parameters")
 	}
-
 }
