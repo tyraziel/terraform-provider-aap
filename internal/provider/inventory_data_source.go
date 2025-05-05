@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"strings"
 
 	"github.com/ansible/terraform-provider-aap/internal/provider/customtypes"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -175,13 +174,13 @@ func (dm *InventoryDataSourceModel) ParseHttpResponse(body []byte) diag.Diagnost
 func (dm *InventoryDataSourceModel) ValidateLookupParameters(datasource *InventoryDataSource) (string, error) {
 	//Here is where we can get the "named" inventory, which is "Inventory Name"++"Organization Name" to derive uniqueness
 	//we will take precedence if the Id is set to use that over the named_url attempt.
-	if dm.Id.String() != "<null>" {
+	if !dm.Id.IsNull() {
 		return path.Join(datasource.client.getApiEndpoint(), "inventories", dm.Id.String()), nil
-	} else if dm.Name.String() != "<null>" && dm.OrganizationName.String() != "<null>" {
-		namedUrl := strings.Join([]string{dm.Name.String()[1 : len(dm.Name.String())-1], "++", dm.OrganizationName.String()[1 : len(dm.OrganizationName.String())-1]}, "")
+	} else if dm.Name.ValueString() != "" && dm.OrganizationName.ValueString() != "" {
+		namedUrl := fmt.Sprintf("%s++%s", dm.Name.ValueString(), dm.OrganizationName.ValueString())
 		return path.Join(datasource.client.getApiEndpoint(), "inventories", namedUrl), nil
 	} else {
-		return "<null>", errors.New("invalid inventory lookup parameters")
+		return "", errors.New("invalid inventory lookup parameters")
 	}
 
 }
