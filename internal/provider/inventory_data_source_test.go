@@ -102,63 +102,63 @@ func TestInventoryDataSourceParseHttpResponse(t *testing.T) {
 
 func TestInventoryDataSourceValidateLookupParameters(t *testing.T) {
 	var testTable = []struct {
-		name string
+		name         string
 		organization string
-		id int64
-		expectError error
-		expectedUrl string
+		id           int64
+		expectError  error
+		expectedUrl  string
 	}{
 		{
-			name: "",
+			name:         "",
 			organization: "",
-			id: 1,
-			expectError: nil,
-			expectedUrl: "inventories/1",
+			id:           1,
+			expectError:  nil,
+			expectedUrl:  "inventories/1",
 		},
 		{
-			name: "test",
+			name:         "test",
 			organization: "org1",
-			id: 1,
-			expectError: nil,
-			expectedUrl: "inventories/1",
+			id:           1,
+			expectError:  nil,
+			expectedUrl:  "inventories/1",
 		},
 		{
-			name: "",
+			name:         "",
 			organization: "org1",
-			id: 1,
-			expectError: nil,
-			expectedUrl: "inventories/1",
+			id:           1,
+			expectError:  nil,
+			expectedUrl:  "inventories/1",
 		},
 		{
-			name: "test",
+			name:         "test",
 			organization: "",
-			id: 1,
-			expectError: nil,
-			expectedUrl: "inventories/1",
+			id:           1,
+			expectError:  nil,
+			expectedUrl:  "inventories/1",
 		},
 		{
-			name: "test",
+			name:         "test",
 			organization: "org1",
-			expectError: nil,
-			expectedUrl: "inventories/test++org1",
+			expectError:  nil,
+			expectedUrl:  "inventories/test++org1",
 		},
 		{
-			name: "",
+			name:         "",
 			organization: "",
-			expectError: errors.New("invalid inventory lookup parameters"),
-			expectedUrl: "",
+			expectError:  errors.New("invalid inventory lookup parameters"),
+			expectedUrl:  "",
 		},
 		{
-			name: "test",
+			name:         "test",
 			organization: "",
-			expectError: errors.New("invalid inventory lookup parameters"),
-			expectedUrl: "",
+			expectError:  errors.New("invalid inventory lookup parameters"),
+			expectedUrl:  "",
 		},
 		{
-			name: "",
+			name:         "",
 			organization: "org1",
-			expectError: errors.New("invalid inventory lookup parameters"),
-			expectedUrl: "",
+			expectError:  errors.New("invalid inventory lookup parameters"),
+			expectedUrl:  "",
 		},
 	}
 	for _, test := range testTable {
@@ -169,7 +169,7 @@ func TestInventoryDataSourceValidateLookupParameters(t *testing.T) {
 			if test.id != 0 {
 				resource.Id = types.Int64Value(test.id)
 			}
-			url, err := resource.ValidateLookupParameters(&InventoryDataSource{
+			url, err := resource.ResourceUrlFromParameters(&InventoryDataSource{
 				client: &AAPClient{},
 			})
 			if err != nil && err.Error() != test.expectError.Error() {

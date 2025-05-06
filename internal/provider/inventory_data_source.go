@@ -31,7 +31,8 @@ type InventoryDataSourceModel struct {
 
 // InventoryDataSource is the data source implementation.
 type InventoryDataSource struct {
-	client ProviderHTTPClient
+	client  ProviderHTTPClient
+	dsutils AAPDataSourceUtils
 }
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -106,7 +107,9 @@ func (d *InventoryDataSource) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
-	resourceURL, err := state.ResourceUrlFromParameters(d)
+	URI := path.Join(d.client.getApiEndpoint(), "inventories")
+	resourceURL, err := d.dsutils.ReturnAAPNamedURL(state.Id, state.Name, state.OrganizationName, URI)
+	// resourceURL, err := state.ResourceUrlFromParameters(d)
 	if err != nil {
 		resp.Diagnostics.AddError("Minimal Data Not Supplied", "Expected either [id] or [name + organization_name] pair")
 		return
@@ -193,6 +196,14 @@ func (d *InventoryDataSource) ValidateConfig(ctx context.Context, req provider.V
 			tfpath.Root("organization_name"),
 			"Missing Attribute Configuration",
 			"Expected organization_name to be configured with name.",
+		)
+	}
+
+	if data.Name.IsNull() && !data.OrganizationName.IsNull() {
+		resp.Diagnostics.AddAttributeWarning(
+			tfpath.Root("name"),
+			"Missing Attribute Configuration",
+			"Expected name to be configured with organization_name.",
 		)
 	}
 
