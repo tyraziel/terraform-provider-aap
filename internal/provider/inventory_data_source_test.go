@@ -105,8 +105,29 @@ func TestInventoryDataSourceValidateLookupParameters(t *testing.T) {
 		expectedUrl string
 	}{
 		{
+			name: "",
+			organization: "",
+			id: 1,
+			expectError: nil,
+			expectedUrl: "inventories/1",
+		},
+		{
 			name: "test",
 			organization: "org1",
+			id: 1,
+			expectError: nil,
+			expectedUrl: "inventories/1",
+		},
+		{
+			name: "",
+			organization: "org1",
+			id: 1,
+			expectError: nil,
+			expectedUrl: "inventories/1",
+		},
+		{
+			name: "test",
+			organization: "",
 			id: 1,
 			expectError: nil,
 			expectedUrl: "inventories/1",
@@ -120,6 +141,18 @@ func TestInventoryDataSourceValidateLookupParameters(t *testing.T) {
 		{
 			name: "",
 			organization: "",
+			expectError: errors.New("invalid inventory lookup parameters"),
+			expectedUrl: "",
+		},
+		{
+			name: "test",
+			organization: "",
+			expectError: errors.New("invalid inventory lookup parameters"),
+			expectedUrl: "",
+		},
+		{
+			name: "",
+			organization: "org1",
 			expectError: errors.New("invalid inventory lookup parameters"),
 			expectedUrl: "",
 		},
